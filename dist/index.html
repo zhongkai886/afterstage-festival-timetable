@@ -108,7 +108,7 @@ list.addEventListener('scroll',showLatestControl,{passive:true});
 latestButton.onclick=()=>{list.focus({preventScroll:true});goToLatest()};
 const nick=form.elements.nick,body=form.elements.body, read=k=>{try{return localStorage.getItem(k)||''}catch{return ''}}, save=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 let client=read('afterstage-chat-client');if(!/^[a-f0-9-]{36}$/.test(client)){client=crypto.randomUUID();save('afterstage-chat-client',client)}nick.value=read('afterstage-chat-nick');
-let timer,stamp,loading=false,synced=false,posting=false,noteUntil=0;const reported=new Set(),clock=new Intl.DateTimeFormat('zh-TW',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Taipei'});
+let timer,stamp,stream,connectTimer,expiryTimer,live=false,revision=-1,loading=false,synced=false,posting=false,noteUntil=0;const reported=new Set(),clock=new Intl.DateTimeFormat('zh-TW',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Taipei'});
 const controls=()=>{send.disabled=!navigator.onLine||!synced||posting};const tell=(s,sticky=false)=>{status.textContent=s;noteUntil=sticky?Date.now()+5000:0};
 async function req(path,data){const ctl=new AbortController(), timeout=setTimeout(()=>ctl.abort(),8000);try{const r=await fetch(api+path,{credentials:'omit',cache:'no-store',signal:ctl.signal,...(data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client,...data})}:{})});const val=await r.json();if(!r.ok)throw Error(val.error||'聊天室暫時無法連線');return val;}finally{clearTimeout(timeout)}}
 function confirmReport(){
@@ -152,7 +152,7 @@ function selectTopic(topic){
 function openChat(topic){
  selectTopic(topic);
  if(panel.open)return;
- panel.showModal();toggle.hidden=true;toggle.setAttribute('aria-expanded','true');close.focus();draw(latest,true);refresh();timer=setInterval(refresh,10000);
+ panel.showModal();toggle.hidden=true;toggle.setAttribute('aria-expanded','true');close.focus();draw(latest,true);watch();timer=setInterval(()=>{if(!live)refresh()},10000);
 }
 allButton.onclick=()=>{selectTopic(null);close.focus();};
 scheduleButton.onclick=()=>{if(currentTopic){scheduleTarget=currentTopic;panel.close()}};
@@ -190,9 +190,47 @@ function draw(messages,resetPosition=false){
  else list.scrollTop=0;
  showLatestControl();
 }
-async function refresh(){if(!panel.open||document.hidden||loading)return;if(!navigator.onLine){synced=false;controls();tell('目前離線，時程仍可查看。');return}loading=true;try{const v=await req('/messages');draw(v.messages);synced=true;if(Date.now()>noteUntil)tell('已連線 · 台灣時間')}catch{synced=false;if(Date.now()>noteUntil)tell('聊天室連線中斷，稍後會自動重試。')}finally{loading=false;controls()}}
-toggle.onclick=()=>openChat(null);close.onclick=()=>panel.close();panel.addEventListener('close',()=>{clearInterval(timer);toggle.hidden=false;toggle.setAttribute('aria-expanded','false');const target=scheduleTarget;scheduleTarget=null;if(target)revealOnSchedule(target);else toggle.focus()});
+const available=()=>panel.open&&!document.hidden&&navigator.onLine;
+function markConnected(){synced=true;controls();if(Date.now()>noteUntil)tell(live?'即時更新 · 台灣時間':'自動更新 · 台灣時間')}
+function expireMessages(){
+ clearTimeout(expiryTimer);
+ const cutoff=Date.now()-86400000, kept=latest.filter(row=>row.created>cutoff);
+ if(kept.length!==latest.length)draw(kept);
+ if(available()&&kept.length)expiryTimer=setTimeout(expireMessages,Math.max(50,Math.min(...kept.map(row=>row.created))-cutoff+20));
+}
+function applySnapshot(value){
+ if(!available()||!Array.isArray(value.messages))return;
+ if(Number.isSafeInteger(value.revision)&&value.revision<revision)return;
+ if(Number.isSafeInteger(value.revision))revision=value.revision;
+ draw(value.messages.filter(row=>row.created>Date.now()-86400000));expireMessages();markConnected();
+}
+async function refresh(){
+ if(!available()||loading)return;
+ loading=true;
+ try{applySnapshot(await req('/messages'))}
+ catch{if(!live&&available()){synced=false;controls();if(Date.now()>noteUntil)tell('聊天室連線中斷，稍後會自動重試。')}}
+ finally{loading=false}
+}
+function stopUpdates(){
+ clearTimeout(connectTimer);clearTimeout(expiryTimer);
+ stream?.close();stream=null;live=false;
+}
+function watch(){
+ if(!available()||stream)return;
+ expireMessages();
+ if(typeof EventSource!=='function'){refresh();return}
+ try{stream=new EventSource(api+'/events')}catch{refresh();return}
+ const source=stream;
+ const ready=()=>{if(source!==stream||!available())return false;live=true;clearTimeout(connectTimer);return true};
+ source.addEventListener('chat',event=>{
+  try{const value=JSON.parse(event.data);if(Array.isArray(value.messages)&&ready())applySnapshot(value)}catch{}
+ });
+ source.addEventListener('ready',()=>{if(ready())markConnected()});
+ source.onerror=()=>{if(source!==stream)return;live=false;if(synced&&Date.now()>noteUntil)tell('重新連線中 · 暫用自動更新')};
+ connectTimer=setTimeout(()=>{if(!live)refresh()},2600);
+}
+toggle.onclick=()=>openChat(null);close.onclick=()=>panel.close();panel.addEventListener('close',()=>{clearInterval(timer);stopUpdates();synced=false;controls();toggle.hidden=false;toggle.setAttribute('aria-expanded','false');const target=scheduleTarget;scheduleTarget=null;if(target)revealOnSchedule(target);else toggle.focus()});
 form.addEventListener('submit',async e=>{e.preventDefault();if(posting||!synced||!navigator.onLine)return;posting=true;controls();try{const text=body.value, message=text.trim();if(!message){tell('請先輸入訊息。',true);return}if(Array.from(message).length+(currentTopic?.prefix.length||0)>240){tell('訊息太長，請縮短後再試。',true);return}await req('/messages',{nick:nick.value,body:(currentTopic?.prefix||'')+message});save('afterstage-chat-nick',nick.value.trim());if(body.value===text)body.value='';tell('訊息已送出。',true);await refresh()}catch(err){tell(err.name==='AbortError'?'連線逾時，請先看看訊息是否已送出。':err.message||'無法送出，請再試。',true)}finally{posting=false;controls()}});
-addEventListener('online',refresh);addEventListener('offline',()=>{synced=false;controls();if(panel.open)tell('目前離線，時程仍可查看。')});document.addEventListener('visibilitychange',refresh);controls();})();
+addEventListener('online',watch);addEventListener('offline',()=>{stopUpdates();synced=false;controls();if(panel.open)tell('目前離線，時程仍可查看。')});document.addEventListener('visibilitychange',()=>{if(document.hidden)stopUpdates();else watch()});controls();})();
 </script>
 </body></html>
