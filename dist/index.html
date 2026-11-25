@@ -88,12 +88,24 @@ document.querySelectorAll('.day').forEach(b=>b.onclick=()=>{currentDay=b.dataset
 #asChat .topic-schedule span{color:#d8ff53;font-size:.76rem;white-space:nowrap}
 .set-card.topic-target{z-index:4;outline:2px solid #d8ff53;outline-offset:1px;box-shadow:inset 0 0 0 1px #d8ff53,0 0 13px #d8ff5355}
 @media(max-height:530px){#asChat ol{height:8rem;min-height:2rem}}
+#asChat ol{overflow-anchor:none}
+#asChat ol:focus-visible{outline:1px solid #d8ff53;outline-offset:-1px}
+#asChat .chat-footer{display:flex;align-items:center;justify-content:space-between;min-height:2.75rem;gap:.25rem;padding:0 .75rem}
+#asChat .chat-footer p{padding:0;margin:.25rem .1rem}
+#asChat .chat-latest{flex:none;margin-left:auto;border-color:#a2bd50;color:#d8ff53;font-size:.75rem;white-space:nowrap;min-height:2rem}
+#asChat .chat-latest[hidden]{display:none}
 </style>
 <button type="button" id="asChatBtn" aria-controls="asChat" aria-expanded="false">聊天室</button>
-<dialog id="asChat" aria-labelledby="asChatTitle"><div class="chat-head"><h2 id="asChatTitle">Afterstage 公開聊天室</h2><button type="button" data-close aria-label="關閉聊天室">關閉</button></div><p>任何人都看得到。請勿貼個資或網址。顯示最近 24 小時、最多 40 則。</p><ol aria-label="聊天訊息"></ol><p role="status">連線中…</p><form><label>暱稱<input name="nick" required maxlength="20" autocomplete="nickname"></label><label>訊息<input name="body" required maxlength="240" autocomplete="off"></label><button type="submit" disabled>送出</button></form></dialog>
+<dialog id="asChat" aria-labelledby="asChatTitle"><div class="chat-head"><h2 id="asChatTitle">Afterstage 公開聊天室</h2><button type="button" data-close aria-label="關閉聊天室">關閉</button></div><p>任何人都看得到。請勿貼個資或網址。顯示最近 24 小時、最多 40 則。</p><ol tabindex="0" aria-label="聊天訊息"></ol><div class="chat-footer"><p role="status">連線中…</p><button type="button" class="chat-latest" hidden><span aria-hidden="true">↓ </span>跳到最新訊息</button></div><form><label>暱稱<input name="nick" required maxlength="20" autocomplete="nickname"></label><label>訊息<input name="body" required maxlength="240" autocomplete="off"></label><button type="submit" disabled>送出</button></form></dialog>
 <script>
 (()=>{'use strict';
 const api='https://afterstage-chat.james-lmz-3845.chatgpt.site', panel=document.querySelector('#asChat'),toggle=document.querySelector('#asChatBtn'),list=panel.querySelector('ol'),status=panel.querySelector('[role=status]'),form=panel.querySelector('form'),send=form.querySelector('[type=submit]'),close=panel.querySelector('[data-close]');
+const latestButton=panel.querySelector('.chat-latest');
+const atLatest=()=>list.scrollHeight-list.clientHeight-list.scrollTop<=12;
+const showLatestControl=()=>{latestButton.hidden=!panel.open||atLatest()};
+function goToLatest(){list.scrollTop=list.scrollHeight;showLatestControl()}
+list.addEventListener('scroll',showLatestControl,{passive:true});
+latestButton.onclick=()=>{list.focus({preventScroll:true});goToLatest()};
 const nick=form.elements.nick,body=form.elements.body, read=k=>{try{return localStorage.getItem(k)||''}catch{return ''}}, save=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 let client=read('afterstage-chat-client');if(!/^[a-f0-9-]{36}$/.test(client)){client=crypto.randomUUID();save('afterstage-chat-client',client)}nick.value=read('afterstage-chat-nick');
 let timer,stamp,loading=false,synced=false,posting=false,noteUntil=0;const reported=new Set(),clock=new Intl.DateTimeFormat('zh-TW',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Taipei'});
@@ -130,16 +142,17 @@ function splitMessage(message){
  return {message,topic,text:topic?raw.slice(cut+2):raw};
 }
 function selectTopic(topic){
+ const changed=currentTopic?.id!==topic?.id;
  currentTopic=topic;scopeTitle.textContent=topic?'聊這場：'+topic.artist:'Afterstage 公開聊天室';
  scopeTitle.title=topic?.meta||'';allButton.hidden=!topic;scheduleButton.hidden=!topic;
  scheduleArtist.textContent=topic?.artist||'';scheduleMeta.textContent=topic?.meta||'';
  body.maxLength=240-(topic?.prefix.length||0);body.placeholder=topic?'送出會加上 #'+topic.artist:'';
- draw(latest);
+ draw(latest,changed);
 }
 function openChat(topic){
  selectTopic(topic);
  if(panel.open)return;
- panel.showModal();toggle.hidden=true;toggle.setAttribute('aria-expanded','true');close.focus();refresh();timer=setInterval(refresh,10000);
+ panel.showModal();toggle.hidden=true;toggle.setAttribute('aria-expanded','true');close.focus();draw(latest,true);refresh();timer=setInterval(refresh,10000);
 }
 allButton.onclick=()=>{selectTopic(null);close.focus();};
 scheduleButton.onclick=()=>{if(currentTopic){scheduleTarget=currentTopic;panel.close()}};
@@ -160,7 +173,23 @@ topicButton.onclick=()=>{
  if(!topic)return;
  artistModal.classList.remove('open');openChat(topic);
 };
-function draw(messages){latest=messages;const view=messages.map(splitMessage).filter(row=>!currentTopic||row.topic?.id===currentTopic.id);const key=(currentTopic?.id||'all')+'|'+view.map(row=>row.message.id).join(',');if(key===stamp)return;stamp=key;const bottom=list.scrollHeight-list.scrollTop-list.clientHeight<35;list.replaceChildren();if(!view.length){const li=document.createElement('li');li.textContent=currentTopic?'這場還沒有訊息。先聊聊吧！':'目前沒有訊息。先打個招呼吧！';list.append(li)}for(const {message:m,topic,text} of view){const li=document.createElement('li'),n=document.createElement('strong'),d=document.createElement('small'),t=document.createElement('span'),r=document.createElement('button');n.textContent=m.nick;d.textContent=clock.format(m.created);t.textContent=text;r.type='button';r.disabled=reported.has(m.id);r.textContent=r.disabled?'已檢舉':'檢舉';r.onclick=async()=>{if(!await confirmReport())return;r.disabled=true;try{await req('/report',{id:m.id});reported.add(m.id);r.textContent='已檢舉';tell('已收到檢舉。',true)}catch{r.disabled=false;tell('檢舉未送出，請稍後再試。',true)}};li.append(n,d);if(topic){const tag=document.createElement('button');tag.type='button';tag.textContent='#'+topic.artist;tag.title=topic.meta;tag.style.cssText='float:none;margin-left:.4rem;color:#d8ff53';tag.onclick=()=>selectTopic(topic);li.append(tag);}li.append(r,t);list.append(li)}if(bottom)list.scrollTop=list.scrollHeight}
+function draw(messages,resetPosition=false){
+ latest=messages;
+ const view=messages.map(splitMessage).filter(row=>!currentTopic||row.topic?.id===currentTopic.id);
+ const key=(currentTopic?.id||'all')+'|'+view.map(row=>row.message.id).join(',');
+ if(key===stamp){if(resetPosition)goToLatest();return}stamp=key;
+ const follow=resetPosition||atLatest(),anchors=new Map();
+ if(!follow){
+  const viewport=list.getBoundingClientRect();
+  for(const row of list.children){const rect=row.getBoundingClientRect();if(row.dataset.chatId&&rect.bottom>viewport.top&&rect.top<viewport.bottom)anchors.set(row.dataset.chatId,rect.top-viewport.top)}
+ }
+ list.replaceChildren();if(!view.length){const li=document.createElement('li');li.textContent=currentTopic?'這場還沒有訊息。先聊聊吧！':'目前沒有訊息。先打個招呼吧！';list.append(li)}for(const {message:m,topic,text} of view){const li=document.createElement('li'),n=document.createElement('strong'),d=document.createElement('small'),t=document.createElement('span'),r=document.createElement('button');li.dataset.chatId=String(m.id);n.textContent=m.nick;d.textContent=clock.format(m.created);t.textContent=text;r.type='button';r.disabled=reported.has(m.id);r.textContent=r.disabled?'已檢舉':'檢舉';r.onclick=async()=>{if(!await confirmReport())return;r.disabled=true;try{await req('/report',{id:m.id});reported.add(m.id);r.textContent='已檢舉';tell('已收到檢舉。',true)}catch{r.disabled=false;tell('檢舉未送出，請稍後再試。',true)}};li.append(n,d);if(topic){const tag=document.createElement('button');tag.type='button';tag.textContent='#'+topic.artist;tag.title=topic.meta;tag.style.cssText='float:none;margin-left:.4rem;color:#d8ff53';tag.onclick=()=>selectTopic(topic);li.append(tag);}li.append(r,t);list.append(li)}
+ if(follow){goToLatest();return}
+ const anchor=[...list.children].find(row=>anchors.has(row.dataset.chatId));
+ if(anchor)list.scrollTop+=anchor.getBoundingClientRect().top-list.getBoundingClientRect().top-anchors.get(anchor.dataset.chatId);
+ else list.scrollTop=0;
+ showLatestControl();
+}
 async function refresh(){if(!panel.open||document.hidden||loading)return;if(!navigator.onLine){synced=false;controls();tell('目前離線，時程仍可查看。');return}loading=true;try{const v=await req('/messages');draw(v.messages);synced=true;if(Date.now()>noteUntil)tell('已連線 · 台灣時間')}catch{synced=false;if(Date.now()>noteUntil)tell('聊天室連線中斷，稍後會自動重試。')}finally{loading=false;controls()}}
 toggle.onclick=()=>openChat(null);close.onclick=()=>panel.close();panel.addEventListener('close',()=>{clearInterval(timer);toggle.hidden=false;toggle.setAttribute('aria-expanded','false');const target=scheduleTarget;scheduleTarget=null;if(target)revealOnSchedule(target);else toggle.focus()});
 form.addEventListener('submit',async e=>{e.preventDefault();if(posting||!synced||!navigator.onLine)return;posting=true;controls();try{const text=body.value, message=text.trim();if(!message){tell('請先輸入訊息。',true);return}if(Array.from(message).length+(currentTopic?.prefix.length||0)>240){tell('訊息太長，請縮短後再試。',true);return}await req('/messages',{nick:nick.value,body:(currentTopic?.prefix||'')+message});save('afterstage-chat-nick',nick.value.trim());if(body.value===text)body.value='';tell('訊息已送出。',true);await refresh()}catch(err){tell(err.name==='AbortError'?'連線逾時，請先看看訊息是否已送出。':err.message||'無法送出，請再試。',true)}finally{posting=false;controls()}});
