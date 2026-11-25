@@ -98,10 +98,46 @@ function confirmReport(){
  panel.append(dialog);
  return new Promise(resolve=>{dialog.addEventListener('close',()=>{const confirmed=dialog.returnValue==='report';dialog.remove();resolve(confirmed)},{once:true});dialog.showModal()});
 }
-function draw(messages){const key=messages.map(m=>m.id).join(',');if(key===stamp)return;stamp=key;const bottom=list.scrollHeight-list.scrollTop-list.clientHeight<35;list.replaceChildren();if(!messages.length){const li=document.createElement('li');li.textContent='目前沒有訊息。先打個招呼吧！';list.append(li)}for(const m of messages){const li=document.createElement('li'),n=document.createElement('strong'),d=document.createElement('small'),t=document.createElement('span'),r=document.createElement('button');n.textContent=m.nick;d.textContent=clock.format(m.created);t.textContent=m.body;r.type='button';r.disabled=reported.has(m.id);r.textContent=r.disabled?'已檢舉':'檢舉';r.onclick=async()=>{if(!await confirmReport())return;r.disabled=true;try{await req('/report',{id:m.id});reported.add(m.id);r.textContent='已檢舉';tell('已收到檢舉。',true)}catch{r.disabled=false;tell('檢舉未送出，請稍後再試。',true)}};li.append(n,d,r,t);list.append(li)}if(bottom)list.scrollTop=list.scrollHeight}
+const artistModal=document.querySelector('#artistModal'), scopeTitle=panel.querySelector('h2');
+const allButton=document.createElement('button'), topicButton=document.createElement('button');
+allButton.type='button';allButton.textContent='回全場';allButton.hidden=true;allButton.style.cssText='margin:.5rem .9rem 0;align-self:flex-start';
+panel.querySelector('.chat-head').after(allButton);
+topicButton.type='button';topicButton.textContent='聊這場';topicButton.style.cssText='margin-top:.75rem;width:100%;padding:.65rem;border:0;border-radius:.5rem;background:#d8ff53;color:#14180c;font-weight:700';
+artistModal.querySelector('.artist-links').after(topicButton);
+const byId=new Map(),byCard=new Map();
+for(const [day,rows] of Object.entries(lineup))for(const [stage,start,end,artist] of rows){
+ const name=stages.find(s=>s.id===stage)?.name;if(!name)continue;
+ const meta=(day==='sat'?'2/28':'3/1')+' · '+start+'–'+end+' · '+name;
+ const id='2026:'+day+':'+stage+':'+start;
+ const topic={id,artist,meta,prefix:'[@'+id+'] '};byId.set(id,topic);byCard.set(artist+'\n'+meta,topic);
+}
+let currentTopic=null,latest=[];
+function splitMessage(message){
+ const raw=message.body,cut=raw.indexOf('] ');
+ const topic=raw.startsWith('[@')&&cut>2?byId.get(raw.slice(2,cut)):null;
+ return {message,topic,text:topic?raw.slice(cut+2):raw};
+}
+function selectTopic(topic){
+ currentTopic=topic;scopeTitle.textContent=topic?'聊這場：'+topic.artist:'Afterstage 公開聊天室';
+ scopeTitle.title=topic?.meta||'';allButton.hidden=!topic;
+ body.maxLength=240-(topic?.prefix.length||0);body.placeholder=topic?'送出會加上 #'+topic.artist:'';
+ draw(latest);
+}
+function openChat(topic){
+ selectTopic(topic);
+ if(panel.open)return;
+ panel.showModal();toggle.hidden=true;toggle.setAttribute('aria-expanded','true');close.focus();refresh();timer=setInterval(refresh,10000);
+}
+allButton.onclick=()=>{selectTopic(null);close.focus();};
+topicButton.onclick=()=>{
+ const topic=byCard.get(document.querySelector('#artistName').textContent+'\n'+document.querySelector('#artistMeta').textContent);
+ if(!topic)return;
+ artistModal.classList.remove('open');openChat(topic);
+};
+function draw(messages){latest=messages;const view=messages.map(splitMessage).filter(row=>!currentTopic||row.topic?.id===currentTopic.id);const key=(currentTopic?.id||'all')+'|'+view.map(row=>row.message.id).join(',');if(key===stamp)return;stamp=key;const bottom=list.scrollHeight-list.scrollTop-list.clientHeight<35;list.replaceChildren();if(!view.length){const li=document.createElement('li');li.textContent=currentTopic?'這場還沒有訊息。先聊聊吧！':'目前沒有訊息。先打個招呼吧！';list.append(li)}for(const {message:m,topic,text} of view){const li=document.createElement('li'),n=document.createElement('strong'),d=document.createElement('small'),t=document.createElement('span'),r=document.createElement('button');n.textContent=m.nick;d.textContent=clock.format(m.created);t.textContent=text;r.type='button';r.disabled=reported.has(m.id);r.textContent=r.disabled?'已檢舉':'檢舉';r.onclick=async()=>{if(!await confirmReport())return;r.disabled=true;try{await req('/report',{id:m.id});reported.add(m.id);r.textContent='已檢舉';tell('已收到檢舉。',true)}catch{r.disabled=false;tell('檢舉未送出，請稍後再試。',true)}};li.append(n,d);if(topic){const tag=document.createElement('button');tag.type='button';tag.textContent='#'+topic.artist;tag.title=topic.meta;tag.style.cssText='float:none;margin-left:.4rem;color:#d8ff53';tag.onclick=()=>selectTopic(topic);li.append(tag);}li.append(r,t);list.append(li)}if(bottom)list.scrollTop=list.scrollHeight}
 async function refresh(){if(!panel.open||document.hidden||loading)return;if(!navigator.onLine){synced=false;controls();tell('目前離線，時程仍可查看。');return}loading=true;try{const v=await req('/messages');draw(v.messages);synced=true;if(Date.now()>noteUntil)tell('已連線 · 台灣時間')}catch{synced=false;if(Date.now()>noteUntil)tell('聊天室連線中斷，稍後會自動重試。')}finally{loading=false;controls()}}
-toggle.onclick=()=>{panel.showModal();toggle.hidden=true;toggle.setAttribute('aria-expanded','true');close.focus();refresh();timer=setInterval(refresh,10000)};close.onclick=()=>panel.close();panel.addEventListener('close',()=>{clearInterval(timer);toggle.hidden=false;toggle.setAttribute('aria-expanded','false');toggle.focus()});
-form.addEventListener('submit',async e=>{e.preventDefault();if(posting||!synced||!navigator.onLine)return;posting=true;controls();try{const text=body.value;await req('/messages',{nick:nick.value,body:text});save('afterstage-chat-nick',nick.value.trim());if(body.value===text)body.value='';tell('訊息已送出。',true);await refresh()}catch(err){tell(err.name==='AbortError'?'連線逾時，請先看看訊息是否已送出。':err.message||'無法送出，請再試。',true)}finally{posting=false;controls()}});
+toggle.onclick=()=>openChat(null);close.onclick=()=>panel.close();panel.addEventListener('close',()=>{clearInterval(timer);toggle.hidden=false;toggle.setAttribute('aria-expanded','false');toggle.focus()});
+form.addEventListener('submit',async e=>{e.preventDefault();if(posting||!synced||!navigator.onLine)return;posting=true;controls();try{const text=body.value, message=text.trim();if(!message){tell('請先輸入訊息。',true);return}if(Array.from(message).length+(currentTopic?.prefix.length||0)>240){tell('訊息太長，請縮短後再試。',true);return}await req('/messages',{nick:nick.value,body:(currentTopic?.prefix||'')+message});save('afterstage-chat-nick',nick.value.trim());if(body.value===text)body.value='';tell('訊息已送出。',true);await refresh()}catch(err){tell(err.name==='AbortError'?'連線逾時，請先看看訊息是否已送出。':err.message||'無法送出，請再試。',true)}finally{posting=false;controls()}});
 addEventListener('online',refresh);addEventListener('offline',()=>{synced=false;controls();if(panel.open)tell('目前離線，時程仍可查看。')});document.addEventListener('visibilitychange',refresh);controls();})();
 </script>
 </body></html>
