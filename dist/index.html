@@ -362,4 +362,45 @@ addEventListener('online',watch);addEventListener('offline',()=>{stopUpdates();s
  render();
 })();
 </script>
+<style>
+.hero.as-wave-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1fr) clamp(130px,34%,345px);align-items:center;gap:4px;min-height:139px;margin:14px 0 10px;padding:14px clamp(12px,3vw,24px);border:1px solid #485234;border-radius:13px;overflow:hidden;background:radial-gradient(ellipse at 77% 45%,#334526 0%,#232c1b 30%,#171c13 70%)}
+.as-wave-hero::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:radial-gradient(#b0ca7024 .65px,transparent .85px);background-size:5px 5px;mask-image:linear-gradient(100deg,transparent 10%,#000 85%)}
+.as-wave-hero .as-wave-copy{min-width:0}.as-wave-hero .eyebrow{gap:6px;color:#d8ff53;font-weight:700;font-size:clamp(9px,1.45vw,13px);letter-spacing:.12em;white-space:nowrap}.as-wave-hero .eyebrow::before{width:10px;flex:none}.as-wave-hero .as-wave-venue{margin:6px 0 0;font-size:clamp(17px,3vw,31px);line-height:1.12;color:#f4f3e8;font-weight:850;letter-spacing:.025em}
+.as-wave-hero .as-spectrum{display:flex;gap:3px;margin-top:10px}.as-spectrum i{width:10px;height:2px;border-radius:2px}
+.as-wave-hero .as-wave-art{display:block;width:100%;height:clamp(94px,14vw,147px);pointer-events:none;overflow:visible}
+#planModal .modal{position:relative;isolation:isolate;border-top-color:#758951;background:linear-gradient(145deg,#202719,#1b1c18 43%)}
+#planModal .as-wave-watermark{position:absolute;top:0;right:9px;width:140px;height:84px;opacity:.20;z-index:-1;pointer-events:none}
+#planModal .modal-head{position:relative}#planModal #imagePlan{background:#29361c;border-color:#7c914e;color:#e6f7b6}
+#planModal .my-item{background:linear-gradient(102deg,#29301f,#25261f 46%);box-shadow:inset 3px 0 #879b57}
+#planModal .my-item.has-conflict{background:linear-gradient(102deg,#352626,#2a211f 52%);box-shadow:inset 3px 0 #ff83b7}
+@media(min-width:761px){.hero.as-wave-hero{min-height:174px}.as-wave-hero .eyebrow::before{width:20px}}
+@media(max-width:370px){.hero.as-wave-hero{grid-template-columns:minmax(0,1fr) 108px;min-height:104px;margin-top:9px;padding:8px 9px}.as-wave-hero .as-wave-art{height:82px}.as-wave-hero .eyebrow{letter-spacing:.06em}}
+</style>
+<script>
+(()=>{
+ const hero=document.querySelector('main > .hero'),plan=document.querySelector('#planModal .modal');if(!hero||!plan)return;
+ const NS='http://www.w3.org/2000/svg';
+ function shape(tag,attrs){const el=document.createElementNS(NS,tag);for(const [key,value] of Object.entries(attrs))el.setAttribute(key,String(value));return el}
+ function wave(css){
+  const svg=shape('svg',{class:css,viewBox:'-230 -151 460 302','aria-hidden':'true',focusable:'false'});
+  const orbit=shape('g',{transform:'rotate(-18)',fill:'none','stroke-linecap':'round'});
+  orbit.append(shape('ellipse',{rx:209,ry:77,stroke:'#d8ff5366','stroke-width':2}),shape('path',{d:'M-194 -32 A209 79 0 0 1 182 -39',stroke:'#ff83b7','stroke-width':2.6}));
+  for(let i=0;i<17;i++){
+   const r=26+i*7.3,phase=i*.11;let d='';
+   for(let j=0;j<96;j++){const a=j/96*Math.PI*2,rr=r*(1+.13*Math.sin(3*a+phase)+.043*Math.cos(7*a-phase));d+=(j?'L':'M')+(rr*Math.cos(a)).toFixed(1)+' '+(rr*.84*Math.sin(a)).toFixed(1)}
+   orbit.append(shape('path',{d:d+'Z',stroke:i%5===0?'#d8ff53':i%3===0?'#a4b77a':'#d8ff539e','stroke-width':i%5===0?2.9:1.7}));
+  }
+  orbit.append(shape('circle',{r:15,fill:'#d8ff53'}),shape('circle',{r:5,fill:'#192019'}),shape('circle',{cx:194,cy:-29,r:4,fill:'#ff83b7'}));svg.append(orbit);
+  for(const [x,y,r,fill] of [[177,-83,18,'#ff83b7'],[-168,84,14,'#d8ff53'],[174,92,9,'#d8ff53'],[-123,-96,8,'#edf5cb']]){
+   svg.append(shape('path',{d:'M0 -10 Q1 -1 10 0 Q1 1 0 10 Q-1 1 -10 0 Q-1 -1 0 -10Z',transform:'translate('+x+' '+y+') scale('+r/10+')',fill}));
+  }
+  return svg;
+ }
+ const copy=document.createElement('div'),venue=document.createElement('p'),spectrum=document.createElement('div'),eyebrow=hero.querySelector('.eyebrow');
+ if(!eyebrow)return;copy.className='as-wave-copy';venue.className='as-wave-venue';spectrum.className='as-spectrum';spectrum.setAttribute('aria-hidden','true');
+ const [festival,location]=eyebrow.textContent.split(' · ');eyebrow.textContent=festival;venue.textContent=location||'';
+ for(const stage of stages){const chip=document.createElement('i');chip.style.backgroundColor=stage.color;spectrum.append(chip)}
+ hero.classList.add('as-wave-hero');copy.append(eyebrow,venue,spectrum);hero.append(copy,wave('as-wave-art'));plan.prepend(wave('as-wave-watermark'));
+})();
+</script>
 </body></html>
