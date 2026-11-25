@@ -233,4 +233,92 @@ toggle.onclick=()=>openChat(null);close.onclick=()=>panel.close();panel.addEvent
 form.addEventListener('submit',async e=>{e.preventDefault();if(posting||!synced||!navigator.onLine)return;posting=true;controls();try{const text=body.value, message=text.trim();if(!message){tell('請先輸入訊息。',true);return}if(Array.from(message).length+(currentTopic?.prefix.length||0)>240){tell('訊息太長，請縮短後再試。',true);return}await req('/messages',{nick:nick.value,body:(currentTopic?.prefix||'')+message});save('afterstage-chat-nick',nick.value.trim());if(body.value===text)body.value='';tell('訊息已送出。',true);await refresh()}catch(err){tell(err.name==='AbortError'?'連線逾時，請先看看訊息是否已送出。':err.message||'無法送出，請再試。',true)}finally{posting=false;controls()}});
 addEventListener('online',watch);addEventListener('offline',()=>{stopUpdates();synced=false;controls();if(panel.open)tell('目前離線，時程仍可查看。')});document.addEventListener('visibilitychange',()=>{if(document.hidden)stopUpdates();else watch()});controls();})();
 </script>
+<style>
+#nowNext{margin:0 0 20px;padding:clamp(13px,2.5vw,20px);border:1px solid #515b39;border-radius:14px;background:#1b2015;color:#f4f3e8}
+#nowNext[hidden],#nnDemo[hidden]{display:none}
+.nn-head{display:flex;justify-content:space-between;align-items:center;gap:8px 14px;flex-wrap:wrap}
+.nn-head h2{font-size:1.3rem;margin:0}.nn-tools{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}.nn-time{color:#c5cead;font-size:.8rem;font-variant-numeric:tabular-nums}
+#nowNext button,#nowNext input,#nowNext select{font:inherit;color:inherit}
+#nowNext button:focus-visible,#nowNext input:focus-visible,#nowNext select:focus-visible{outline:2px solid #d8ff53;outline-offset:2px}
+#nnSchedule{border:1px solid #67764e;border-radius:8px;background:#262f1c;padding:.5rem .7rem;cursor:pointer;min-height:44px}
+#nnMine{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;margin:12px 0;border:1px solid #91a94c;background:#27321a;border-radius:9px;padding:8px 10px}
+#nnMine h3{margin:0;color:#d8ff53;font-size:.9rem}.nn-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.nn-stage{padding:8px;border:1px solid #414b34;border-radius:8px;background:#20251a;min-width:0}.nn-stage h3{font-size:.87rem;margin:0 0 4px}.nn-stage h3 i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.nn-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.nn-cell{min-width:0}
+.nn-label{font-size:.73rem;color:#c6ceb9;display:block;margin:1px 4px}.nn-cell.on .nn-label{color:#d8ff53;font-weight:700}
+#nowNext .nn-act{width:100%;min-width:0;min-height:44px;text-align:left;padding:4px;border-radius:5px;border:1px solid transparent;background:transparent;cursor:pointer;line-height:1.2}
+#nowNext .nn-act:hover{background:#2c3622;border-color:#61744b}
+.nn-act strong,.nn-act small{display:block}.nn-act strong{font-size:.94rem;overflow-wrap:anywhere}.nn-act small,.nn-empty{font-size:.76rem;color:#c3ceb5;font-variant-numeric:tabular-nums}.nn-act small{margin-top:4px}.nn-empty{display:block;padding:4px}
+#nnDemo{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin:10px 0;color:#e0e7c9;font-size:.87rem}#nnDemo input,#nnDemo select{border:1px solid #67764e;padding:6px;border-radius:6px;background:#252d1c;color-scheme:dark}
+@media(max-width:580px){.nn-grid{grid-template-columns:minmax(0,1fr)}}
+@media(min-width:1100px){.nn-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+<script>
+(()=>{
+ const heading=document.querySelector('#schedule');
+ const panel=document.createElement('section');panel.id='nowNext';panel.hidden=true;panel.setAttribute('aria-labelledby','nnHeading');
+ panel.innerHTML='<div class="nn-head"><h2 id="nnHeading">現在／下一場</h2><div class="nn-tools"><span class="nn-time" id="nnTime"></span><button type="button" id="nnSchedule">跳到完整時程</button></div></div><div id="nnDemo" hidden><strong>活動日示範</strong><label>日期 <select id="nnDay"><option value="sat">2/28 第一天</option><option value="sun">3/1 第二天</option></select></label><label>時間 <input id="nnClock" type="time" value="14:35"></label></div><div id="nnMine"><h3>我的下一場</h3><div id="nnFavorite"></div></div><div class="nn-grid" id="nnStages"></div>';
+ heading.before(panel);
+ const dates={'2026-02-28':'sat','2026-03-01':'sun'},days=['sat','sun'];
+ const demo=new URLSearchParams(location.search).get('demo')==='now-next';
+ const taipei=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+ const $=id=>panel.querySelector('#'+id);
+ const rows=Object.fromEntries(days.map(day=>[day,lineup[day].map(([stage,start,end,artist])=>({stage,start,end,artist,day,s:toMin(start),e:toMin(end)})).sort((a,b)=>a.s-b.s)]));
+ function clock(date=new Date()){
+  if(demo)return {day:$('nnDay').value,time:$('nnClock').value||'14:35'};
+  const p=Object.fromEntries(taipei.formatToParts(date).map(x=>[x.type,x.value]));
+  return {day:dates[p.year+'-'+p.month+'-'+p.day],time:p.hour+':'+p.minute};
+ }
+ function stagePair(day,minute,stage){
+  const items=rows[day].filter(row=>row.stage===stage);
+  return {current:items.find(row=>row.s<=minute&&minute<row.e),next:items.find(row=>row.s>minute)};
+ }
+ function personalNext(day,minute){
+  for(const d of days.slice(days.indexOf(day))){
+   const row=rows[d].find(r=>(d!==day||r.s>minute)&&saved.has(key(d,r.stage,r.artist)));
+   if(row)return row;
+  }
+ }
+ const name=id=>stages.find(s=>s.id===id)?.name||'';
+ function switchDay(day){if(currentDay!==day)document.querySelector('.day[data-day="'+day+'"]')?.click()}
+ function act(row,extra){
+  const b=document.createElement('button'),title=document.createElement('strong'),meta=document.createElement('small');
+  b.type='button';b.className='nn-act';title.textContent=row.artist;meta.textContent=row.start+'–'+row.end+(extra?' · '+extra:'');
+  b.append(title,meta);b.onclick=()=>{switchDay(row.day);showArtist(row.artist,row.start,row.end,name(row.stage));document.querySelector('#closeArtist')?.focus({preventScroll:true})};
+  return b;
+ }
+ function hint(text){const el=document.createElement('span');el.className='nn-empty';el.textContent=text;return el}
+ function cell(label,row,empty,playing=false){
+  const el=document.createElement('div'),tag=document.createElement('span');el.className='nn-cell'+(playing?' on':'');tag.className='nn-label';tag.textContent=label;
+  el.append(tag,row?act(row):hint(empty));return el;
+ }
+ let lastKey='',timer;
+ function render(){
+  clearTimeout(timer);
+  const {day,time}=clock();panel.hidden=!day;
+  if(!day){lastKey='';if(!demo)timer=setTimeout(render,60000);return}
+  const minute=toMin(time), dateLabel=day==='sat'?'2/28':'3/1';
+  $('nnTime').textContent=dateLabel+' '+time+' · 台灣時間';
+  const pairs=stages.map(stage=>({stage,...stagePair(day,minute,stage.id)})),mine=personalNext(day,minute);
+  const signature=JSON.stringify([day,pairs.map(x=>[x.current?.start,x.next?.start]),mine?.day,mine?.stage,mine?.start,saved.size>0]);
+  if(signature!==lastKey){
+   lastKey=signature;
+   $('nnFavorite').replaceChildren(mine?act(mine,(mine.day!==day?'明天 · ':'')+name(mine.stage)):hint(saved.size?'沒有接下來的收藏演出':'在時程表點 ☆ 加入想看的演出'));
+   $('nnStages').replaceChildren(...pairs.map(({stage,current,next})=>{
+    const card=document.createElement('article'),h=document.createElement('h3'),dot=document.createElement('i'),pair=document.createElement('div');
+    card.className='nn-stage';dot.style.backgroundColor=stage.color;dot.setAttribute('aria-hidden','true');h.append(dot,stage.name);pair.className='nn-pair';
+    pair.append(cell('正在演出',current,next?'目前無演出':'本日已結束',!!current),cell('下一場',next,'本日無下一場'));card.append(h,pair);return card;
+   }));
+  }
+  if(!demo)timer=setTimeout(render,60000-Date.now()%60000+60);
+ }
+ $('nnSchedule').onclick=()=>{switchDay(clock().day);heading.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})};
+ $('nnDemo').hidden=!demo;
+ $('nnDay').addEventListener('change',render);$('nnClock').addEventListener('input',render);
+ new MutationObserver(render).observe(document.querySelector('#planCount'),{childList:true,characterData:true,subtree:true});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
+ if(!demo&&!sharedKeys&&clock().day)switchDay(clock().day);
+ render();
+})();
+</script>
 </body></html>
