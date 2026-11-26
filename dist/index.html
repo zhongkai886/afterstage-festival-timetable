@@ -88,15 +88,21 @@ function paintFestivalPoster(canvas,groups,items){
  ctx.fillStyle='#d8ff5314';for(let i=0;i<5700;i++)ctx.fillRect(rand()*w,rand()*360,i%13===0?2:1,1);
  rule(m,48,w-m,48,'#86925a');rule(m,349,w-m,349,acid,2);
  txt('AFTERSTAGE /  VOL. 01',m,79,20,700,acid,mono);ctx.textAlign='right';txt('FESTIVAL FIELD NOTES',w-m,79,18,600,muted,mono);ctx.textAlign='left';
- // Warped vinyl grooves form an original soundwave totem. All art is drawn locally.
- ctx.save();ctx.translate(805,201);ctx.rotate(-.31);ctx.lineCap='round';
- const orbit=(rx,ry,from,to,color,weight)=>{ctx.strokeStyle=color;ctx.lineWidth=weight;ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,from,to);ctx.stroke()};
- orbit(209,77,.03,6.23,'#d8ff5377',1.5);orbit(211,82,3.37,5.86,pink,2);
- for(let i=0;i<17;i++){const r=26+i*7.3,phase=i*.11;ctx.beginPath();for(let j=0;j<=180;j++){const a=j/180*Math.PI*2,rr=r*(1+.13*Math.sin(3*a+phase)+.043*Math.cos(7*a-phase));const x=rr*Math.cos(a),y=rr*.84*Math.sin(a);if(j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.closePath();ctx.strokeStyle=i%5===0?acid:(i%3===0?'#a4b77a':'#d8ff539e');ctx.lineWidth=i%5===0?2.9:1.35;ctx.stroke()}
- circle(0,0,15,acid);circle(0,0,5,'#192019');circle(195,-30,4,pink);circle(-178,42,3,acid);ctx.restore();
- star(972,135,18,pink);star(637,264,13,acid);star(960,286,8,acid);star(687,107,7,'#edf5cb');
+ // Simplified stage positions from Taichung City's EMERGE FEST 2026 area map.
+ ctx.save();ctx.translate(578,94);ctx.lineCap='round';ctx.lineJoin='round';
+ ctx.beginPath();ctx.roundRect(0,0,440,244,14);ctx.fillStyle='#171e17';ctx.fill();ctx.strokeStyle='#65794e';ctx.lineWidth=1.5;ctx.stroke();
+ const path=(pts,color,width,dash=[])=>{ctx.beginPath();ctx.setLineDash(dash);ctx.strokeStyle=color;ctx.lineWidth=width;pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();ctx.setLineDash([])};
+ ctx.beginPath();ctx.moveTo(169,135);ctx.bezierCurveTo(194,119,208,82,237,64);ctx.bezierCurveTo(281,34,317,56,329,81);ctx.bezierCurveTo(342,104,303,169,271,186);ctx.lineTo(220,190);ctx.closePath();ctx.fillStyle='#263523';ctx.fill();
+ path([[17,190],[139,195],[180,219],[191,228]],'#475741',3);path([[152,133],[155,166],[175,186],[191,218]],'#526248',3);
+ path([[148,133],[184,104],[219,73],[259,54],[302,48],[347,53],[417,29]],'#526248',3);
+ path([[34,168],[78,151],[121,157],[155,152],[183,126],[213,104],[260,82],[295,72],[345,81],[398,63]],'#8ea57b',2,[3,5]);
+ path([[155,152],[173,180],[186,206]],'#8ea57b',2,[3,5]);
+ const activeStages=new Set(items.map(item=>item.stage));
+ const pins=[['temple',34,168,21,141,'紫雲巖'],['adventure',186,206,104,220,'冒險'],['sight',230,168,246,180,'光景'],['dazn',256,143,273,156,'DAZN'],['main',285,118,301,126,'浮現'],['courage',260,82,197,70,'勇氣'],['hope',398,63,360,48,'希望']];
+ for(const [id,x,y,lx,ly,label] of pins){const stage=stages.find(s=>s.id===id),chosen=activeStages.has(stage.name);if(chosen){circle(x,y,12,stage.color+'38');circle(x,y,8,stage.color)}else{circle(x,y,6,stage.color);circle(x,y,3,'#171e17')}txt(label,lx,ly,21,750,chosen?stage.color:ink)}
+ txt('場地地圖',16,30,23,850,acid);txt('2026 · 位置示意',121,28,15,650,muted);
+ ctx.textAlign='right';txt('實心＝本圖行程舞台',424,228,16,650,muted);ctx.restore();
  txt('EMERGE FEST 2026',m,133,27,750,muted,mono);txt('浮現祭',m-3,242,108,950,acid,sans);txt('我的演出行程',m,303,46,800,ink);txt('MY FESTIVAL RUN  /  '+String(items.length).padStart(2,'0')+' SETS',m,331,17,700,muted,mono);
- for(let i=0;i<7;i++)ctx.fillStyle=stages[i].color,ctx.fillRect(w-m-118+17*i,326,12,5);
  let y=376;
  for(const group of groups){
   const sat=group.day==='sat';ctx.fillStyle=sat?acid:pink;ctx.fillRect(m,y,w-2*m,72);
